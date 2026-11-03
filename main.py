@@ -1,4 +1,3 @@
-# put your prefect flow here
 from prefect import flow, task, get_run_logger
 import os
 import httpx
@@ -41,7 +40,7 @@ def logs_to_file(fn):
         LOGS_DIR.mkdir(exist_ok=True)
         handler = logging.FileHandler(LOGS_DIR / f"{fn.__name__}.log")
         handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | %(message)s"))
-        task_logger = get_run_logger().logger # the logger Prefet writes task logs to
+        task_logger = get_run_logger().logger # the logger Prefect writes task logs to
         task_logger.addHandler(handler)
         try:
             return fn(*args, **kwargs)
@@ -138,7 +137,7 @@ def paginate(repo, endpoint, url, subfolder=None, stop_before=None):
             })
             next_url = response.links.get("next", {}).get("url")
         records.extend(data)
-        # pulls only: sorted newest-updated first, so top once pass the cutoff
+        # pulls only: sorted newest-updated first, so top once we pass the cutoff
         if stop_before and data and data[-1]["updated_at"] < stop_before:
             break
         url = next_url
@@ -191,7 +190,6 @@ def get_since(repo, endpoint):
     return row[0].strftime("%Y-%m-%dT%H:%M:%SZ") if row and row[0] else WINDOW_START
     
 # task and flow
-#REPOS = ["scikit-learn/scikit-learn", "dask/dask", "plotly/plotly.py"]
 REPOS = ["scikit-learn/scikit-learn", "dask/dask", "plotly/plotly.py"]
 
 @task
@@ -202,6 +200,7 @@ def extract():
         extract_repo(repo)
     get_run_logger().info(f"Pages skipped (already on disk): {PAGES_SKIPPED}, "
                           f"pages fetched (API requests): {PAGES_FETCHED}")
+    get_run_logger().info(f"API requests this run (including retries): {API_REQUESTS}")
 
 ENDPOINT_TABLES = {
     "commits": ("raw_commits", lambda r: r["sha"], lambda r: r["commit"]["committer"]["date"]),
@@ -313,7 +312,7 @@ def dbt_build():
     return runner.invoke(["build"])
 
 
-# raw table -> (staging model, filter staging ap
+# raw table -> (staging model, filter staging applies to raw rows)
 STAGING_FILTERS = {
     "raw_commits":       ("stg_commits",      "true"), 
     "raw_pull_requests": ("stg_pull_requests", "true"),
@@ -321,7 +320,7 @@ STAGING_FILTERS = {
     "raw_releases":      ("stg_releases",      "not (payload->>'draft')::boolean"),
 }
 
-# complete months with no commits that were conf loss)
+# complete months with no commits that were confirmed on GitHub (not data loss)
 KNOWN_GAPS = {("dask/dask", "2026-10-01")}
 
 def show(con, sql):
@@ -493,9 +492,9 @@ def score_repos(con, logger):
                for rank, r in enumerate(ranked, start=1)]
 
     header = f"{'rank':<5}{'repo':<28}{'score':>8}" + "".join(f"{d:>12}" for d in DIMENSION_WEIGHTS)
-    lines = [header] + ["f{rk:<5}{r:<28}{s:>8}" + "".join(f"{v:>12}" for v in subs)
+    lines = [header] + [f"{rk:<5}{r:<28}{s:>8}" + "".join(f"{v:>12}" for v in subs)
                         for rk, r, s, *subs in results]
-    logger.info("Health ranking:\n" + "\n.".join(lines))
+    logger.info("Health ranking:\n" + "\n".join(lines))
     return results
 
 def save_scores(results, logger):
