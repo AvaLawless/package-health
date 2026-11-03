@@ -42,7 +42,6 @@ See https://docs.prefect.io/v3/concepts/server#how-to-guides for more informatio
 | Run | API Requests |
 |---|---|
 | Full (run_full.log) | 7,294 |
-|---|---|
 | Incremental (run_incremental.log) | 37|
 
 **Idempotency**
