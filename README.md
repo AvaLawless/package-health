@@ -38,13 +38,12 @@ See https://docs.prefect.io/v3/concepts/server#how-to-guides for more informatio
 ## Task 2: Load
 
 **Incremental Loads**
-┌───────────────────────────────────┬──────────────┐
-│                Run                │ API requests │
-├───────────────────────────────────┼──────────────┤
-│ Full (run_full.log)               │ 7,294        │
-├───────────────────────────────────┼──────────────┤
-│ Incremental (run_incremental.log) │ 37           │
-└───────────────────────────────────┴──────────────┘
+
+| Run | API Requests |
+|---|---|
+| Full (run_full.log) | 7,294 |
+|---|---|
+| Incremental (run_incremental.log) | 37|
 
 **Idempotency**
 
