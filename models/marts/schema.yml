@@ -1,0 +1,133 @@
+version: 2
+
+models:
+  - name: fct_pull_requests
+    description: >
+      One row per PR created on or after 2024-01-01. Open PRs are kept (is_open = true);
+      their merge/close durations are NULL, so medians skip them.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || number"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: number
+        description: PR number.
+        data_tests: [not_null]
+      - name: author_login
+        description: GitHub login of the PR author.
+      - name: is_bot
+        description: True if the PR author is a bot.
+      - name: state
+        description: PR state at run time.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['open', 'closed']
+      - name: created_at
+        description: When the PR was opened, UTC.
+      - name: updated_at
+        description: Last update to the PR, UTC.
+      - name: closed_at
+        description: When the PR was closed; NULL if open.
+      - name: merged_at
+        description: When the PR was merged; NULL unless merged.
+      - name: is_merged
+        description: merged_at IS NOT NULL.
+      - name: is_closed_unmerged
+        description: Closed without being merged.
+      - name: is_open
+        description: Still open at run time.
+      - name: first_review_at
+        description: Earliest review by someone other than the author and not a bot; NULL if never reviewed.
+      - name: hours_to_first_review
+        description: Hours from created_at to first_review_at; NULL if never reviewed.
+      - name: reviewed_within_7d
+        description: hours_to_first_review <= 168; false if never reviewed.
+      - name: hours_to_merge
+        description: Hours from created_at to merged_at; NULL unless merged.
+      - name: hours_to_close
+        description: Hours from created_at to closed_at (merged or not); NULL if open.
+      - name: is_stale
+        description: Open and not updated in the 180 days before run time.
+      - name: has_approving_review
+        description: Has at least one APPROVED review from a non-author, non-bot reviewer.
+
+  - name: fct_releases
+    description: One row per published release on or after 2024-01-01.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || id"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: id
+        description: Release ID.
+        data_tests: [not_null]
+      - name: tag_name
+        description: Git tag of the release.
+      - name: published_at
+        description: When the release was published, UTC.
+      - name: is_prerelease
+        description: True if marked as a prerelease.
+      - name: days_since_previous
+        description: Days since the repo's previous release (computed before the 2024 filter); NULL for a repo's first release on GitHub.
+
+  - name: mart_repo_monthly
+    description: One row per repo per month, January 2024 through the run month; months with no activity show 0.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || month"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: month
+        description: First day of the month.
+        data_tests: [not_null]
+      - name: prs_opened
+        description: PRs created in the month.
+      - name: prs_merged
+        description: PRs merged in the month.
+      - name: prs_closed_unmerged
+        description: PRs closed without merging in the month.
+      - name: merge_ratio
+        description: prs_merged / (prs_merged + prs_closed_unmerged); NULL when both are 0.
+      - name: median_first_review_hours
+        description: Median hours to first review of PRs opened in the month (unreviewed PRs excluded).
+      - name: median_merge_hours
+        description: Median hours to merge of PRs merged in the month.
+      - name: commits
+        description: Commits authored in the month.
+      - name: active_contributors
+        description: Distinct non-bot PR authors who opened a PR in the month.
+      - name: is_partial_month
+        description: True for the run month, which is not yet complete.
+
+  - name: mart_health_inputs
+    description: One row per repo with every metric scored in Task 5 (rates, shares, medians and slopes, never raw counts).
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [unique, not_null]
+      - name: commits_per_week
+        description: Commits since 2024-01-01 divided by weeks in the window. Higher is healthier.
+      - name: commit_trend
+        description: Slope of monthly commits over complete months (commits per month, per month). Higher is healthier.
+      - name: pct_reviewed_within_7d
+        description: Share of PRs (created 7+ days before run time) first reviewed within 7 days. Higher is healthier.
+      - name: median_hours_to_first_review
+        description: Median hours from PR creation to first review. Lower is healthier.
+      - name: median_hours_to_merge
+        description: Median hours from PR creation to merge. Lower is healthier.
+      - name: merge_rate
+        description: Merged / (merged + closed unmerged). Higher is healthier.
+      - name: pct_open_stale
+        description: Share of open PRs with no update in 180+ days. Lower is healthier.
+      - name: releases_per_year
+        description: Releases since 2024-01-01 per year of window. Higher is healthier.

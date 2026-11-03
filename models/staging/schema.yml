@@ -1,0 +1,120 @@
+version: 2
+
+# Bot rule (applied to PR authors, reviewers and commit authors):
+#   is_bot = user.type = 'Bot' OR user.login LIKE '%[bot]'
+#   A missing user (e.g. commit email not linked to an account) counts as not a bot.
+
+models:
+  - name: stg_commits
+    description: One row per commit since 2024-01-01, deduplicated on (repo, sha).
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || sha"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: sha
+        description: Commit SHA (natural key).
+        data_tests: [not_null]
+      - name: author_login
+        description: GitHub login of the commit author; NULL when the commit email isn't linked to an account.
+      - name: is_bot
+        description: True if the author is a bot (see bot rule above).
+      - name: committed_at
+        description: Commit author date (commit.author.date), UTC.
+      - name: fetched_at
+        description: When the landing file was fetched.
+
+  - name: stg_pull_requests
+    description: One row per pull request, deduplicated on (repo, number).
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || number"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: number
+        description: PR number (natural key within a repo).
+        data_tests: [not_null]
+      - name: author_login
+        description: GitHub login of the PR author.
+      - name: is_bot
+        description: True if the PR author is a bot (see bot rule above).
+      - name: state
+        description: PR state at fetch time.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['open', 'closed']
+      - name: created_at
+        description: When the PR was opened, UTC.
+      - name: updated_at
+        description: Last update to the PR, UTC.
+      - name: closed_at
+        description: When the PR was closed (merged or not); NULL if open.
+      - name: merged_at
+        description: When the PR was merged; NULL unless merged.
+      - name: fetched_at
+        description: When the landing file was fetched.
+
+  - name: stg_pr_reviews
+    description: One row per submitted review (PENDING reviews dropped), deduplicated on (repo, id).
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || id"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: id
+        description: Review ID (natural key).
+        data_tests: [not_null]
+      - name: pr_number
+        description: Number of the reviewed PR, parsed from pull_request_url.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_pull_requests')
+                field: number
+      - name: reviewer_login
+        description: GitHub login of the reviewer.
+      - name: is_bot
+        description: True if the reviewer is a bot (see bot rule above).
+      - name: state
+        description: Review outcome.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED']
+      - name: submitted_at
+        description: When the review was submitted, UTC.
+      - name: fetched_at
+        description: When the landing file was fetched.
+
+  - name: stg_releases
+    description: One row per non-draft release, deduplicated on (repo, id).
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "repo || '/' || id"
+    columns:
+      - name: repo
+        description: Repository as owner/name.
+        data_tests: [not_null]
+      - name: id
+        description: Release ID (natural key).
+        data_tests: [not_null]
+      - name: tag_name
+        description: Git tag of the release.
+      - name: published_at
+        description: When the release was published, UTC.
+      - name: prerelease
+        description: True if GitHub marks the release as a prerelease.
+      - name: fetched_at
+        description: When the landing file was fetched.

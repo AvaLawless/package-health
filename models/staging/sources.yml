@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: main
+    tables:
+      - name: raw_commits
+      - name: raw_pull_requests
+      - name: raw_pr_reviews
+      - name: raw_releases
