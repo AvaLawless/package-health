@@ -18,7 +18,7 @@ import logging
 from prefect.blocks.system import Secret
 
 # token
-TOKEN = os.environ['GH_PAT'] or Secret.load("psz6ah-pat").get()
+TOKEN = os.environ.get("GH_PAT") or Secret.load("psz6ah-pat").get()
 
 # raw directory
 RAW_DIR = Path("data/raw")
