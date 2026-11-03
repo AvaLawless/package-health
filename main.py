@@ -13,9 +13,12 @@ import statistics
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import functools
+import logging
+from prefect.blocks.system import Secret
 
 # token
-TOKEN = os.environ['GH_PAT']
+TOKEN = os.environ['GH_PAT'] or Secret.load("psz6ah-pat").get()
 
 # raw directory
 RAW_DIR = Path("data/raw")
@@ -29,12 +32,31 @@ HEADERS = {
     "Accept": "application/vnd.github+json"
 }
 
+# log helper
+LOGS_DIR = Path("logs")
+def logs_to_file(fn):
+    """Also write everything a task logs to logs/<task name>.log"""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        LOGS_DIR.mkdir(exist_ok=True)
+        handler = logging.FileHandler(LOGS_DIR / f"{fn.__name__}.log")
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | %(message)s"))
+        task_logger = get_run_logger().logger # the logger Prefet writes task logs to
+        task_logger.addHandler(handler)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            task_logger.removeHandler(handler)
+            handler.close()
+    return wrapper
+
 # httpx.client
 client = httpx.Client(headers=HEADERS, timeout=30.0)
 
 # page counters for the whole run: skipped = already on disk, fetched = new API requests
 PAGES_SKIPPED = 0
 PAGES_FETCHED = 0
+API_REQUESTS = 0
 
 # fetch a single page helper
 # makes the request, reads the rate limit headers and sleeps until the reset time if fewer than 20 requests are left.
@@ -45,6 +67,8 @@ PAGES_FETCHED = 0
 def fetch_single_page(url):
     logger = get_run_logger()
     response = client.get(url)
+    global API_REQUESTS
+    API_REQUESTS += 1
 
     # read X-RateLimit-Remaining headers on every response
     rate_limit_remaining = int(response.headers.get('X-RateLimit-Remaining', 100))
@@ -171,6 +195,7 @@ def get_since(repo, endpoint):
 REPOS = ["scikit-learn/scikit-learn", "dask/dask", "plotly/plotly.py"]
 
 @task
+@logs_to_file
 def extract():
     prepare_raw_dir()
     for repo in REPOS:
@@ -186,6 +211,7 @@ ENDPOINT_TABLES = {
 }
 
 @task
+@logs_to_file
 def load():
     con = duckdb.connect("packages.duckdb")
     con.execute("""
@@ -276,6 +302,7 @@ def load():
 DBT_DIR = Path(__file__).parent
 
 @task(log_prints=True)
+@logs_to_file
 def dbt_build():
     runner = PrefectDbtRunner(
         settings=PrefectDbtSettings(
@@ -409,6 +436,7 @@ def describe(con, logger):
 
 
 @task
+@logs_to_file
 def validate():
     logger = get_run_logger()
     con = duckdb.connect("packages.duckdb")
@@ -482,6 +510,7 @@ def save_scores(results, logger):
     logger.info(f"Wrote {len(results)} rows to health scores")
 
 @task
+@logs_to_file
 def model_and_rank():
     logger = get_run_logger()
     with duckdb.connect("packages.duckdb") as con:
@@ -617,10 +646,11 @@ def make_plots(logger):
     logger.info(f"Saved 3 plots to {PLOTS_DIR}/")
 
 @task
+@logs_to_file
 def plot():
     make_plots(get_run_logger())
 
-@flow
+@flow("psz6ah-package-health")
 def package_health():
     extract()
     load()
