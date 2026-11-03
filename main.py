@@ -650,7 +650,7 @@ def make_plots(logger):
 def plot():
     make_plots(get_run_logger())
 
-@flow("psz6ah-package-health")
+@flow(name="psz6ah-package-health")
 def package_health():
     extract()
     load()
